@@ -2,7 +2,7 @@
   "name": "芝华仕价格查询系统",
   "short_name": "芝华仕价格",
   "description": "芝华仕全系列商品价格一键查询",
-  "start_url": "./芝华仕价格查询.html",
+  "start_url": "./",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#f5f6fa",
