@@ -248,6 +248,7 @@ function showWelcome(){
     '<h3>👋 你好！我是芝华仕AI价格助手</h3>'+
     '<div class="feat"><span>🔍</span> 输入商品名称/编码/款式即可查价</div>'+
     '<div class="feat"><span>🤖</span> 支持模糊查询，说人话就行（如"三人沙发"）</div>'+
+    '<div class="feat"><span>🛋️</span> 支持按规格查询：4人位/电动/手动沙发</div>'+
     '<div class="feat"><span>🎤</span> 点击麦克风按钮，语音说出商品名</div>'+
     '<div class="feat"><span>💰</span> 同时查多个商品，自动计算总价</div>'+
     '<div class="feat"><span>🛒</span> 点击"加入报价单"可累计多件商品</div>'+
@@ -258,7 +259,9 @@ function showWelcome(){
     '<span class="chip" onclick="quickQ(this)">SE-13006M</span>'+
     '<span class="chip" onclick="quickQ(this)">伯爵茶几+伯爵床</span>'+
     '<span class="chip" onclick="quickQ(this)">三人沙发</span>'+
-    '<span class="chip" onclick="quickQ(this)">便宜的茶几</span>'+
+    '<span class="chip" onclick="quickQ(this)">4人位电动沙发</span>'+
+    '<span class="chip" onclick="quickQ(this)">13006 4人位</span>'+
+    '<span class="chip" onclick="quickQ(this)">电动沙发</span>'+
     '</div></div></div>';
   document.getElementById("chatArea").innerHTML=html;
 }
@@ -525,28 +528,18 @@ function parseKeywords(q){
 
 function smartSplit(q){
   var tokens=[];
-  var re=/([a-zA-Z]{0,3}-?\d{3,})|([\u4e00-\u9fa5]+)|(\d{6,})/g;
+  var re=/([a-zA-Z]{0,3}-?\d{3,})|(\d[\u4e00-\u9fa5]{1,2})|([\u4e00-\u9fa5]+)|(\d{6,})/g;
   var m;
   while((m=re.exec(q))!==null){
     if(m[1])tokens.push(m[1]);
     if(m[2])tokens.push(m[2]);
     if(m[3]&&tokens.indexOf(m[3])===-1)tokens.push(m[3]);
+    if(m[4]&&tokens.indexOf(m[4])===-1)tokens.push(m[4]);
   }
   if(tokens.length===0){
     tokens=q.split(/[\s,，、+]+/).filter(function(s){return s.length>0;});
   }
   return tokens;
-}
-
-function searchProduct(kw){
-  kw=kw.toLowerCase().trim();
-  var kwVariants=[kw];
-  var synonyms=getSynonyms(kw);
-  kwVariants=kwVariants.concat(synonyms);
-  return PRICE_DATA.filter(function(r){
-    var fields=[r["商品编码"],r["商品名称"],r["款式"],r["类别"],r["规格"],r["来源"],r["系列"],r["材质说明"]];
-    return fields.some(function(x){return x&&kwVariants.some(function(v){return String(x).toLowerCase().indexOf(v)!==-1;});});
-  });
 }
 
 var SYNONYM_MAP={
@@ -568,7 +561,23 @@ var SYNONYM_MAP={
   '床头柜':['ctg','床头'],
   '斗柜':['dg'],
   '妆台':['zt','梳妆台'],
-  '妆凳':['zd','梳妆凳']
+  '妆凳':['zd','梳妆凳'],
+  '4人位':['l4'],'4座位':['l4'],'四人位':['l4'],'四座位':['l4'],
+  '3人位':['l3'],'3座位':['l3'],'三人位':['l3'],'三座位':['l3'],
+  '2人位':['l2'],'2座位':['l2'],'二人位':['l2'],'二座位':['l2'],
+  '1人位':['l1'],'1座位':['l1'],'一人位':['l1'],'一座位':['l1'],'单人位':['l1'],
+  '5人位':['l5'],'5座位':['l5'],'五人位':['l5'],'五座位':['l5']
+};
+
+var SPEC_REGEX={
+  '电动沙发':/l\d+-\w*e/i,
+  '电动':/l\d+-\w*e/i,
+  '手动沙发':/l\d+-\w*k/i,
+  '手动':/l\d+-\w*k/i,
+  '1电动':/l\d+-1e/i,
+  '2电动':/l\d+-2e/i,
+  '3电动':/l\d+-3e/i,
+  '4电动':/l\d+-4e/i
 };
 
 function getSynonyms(kw){
@@ -585,6 +594,31 @@ function getSynonyms(kw){
   return result.filter(function(v,i,a){return a.indexOf(v)===i;});
 }
 
+function matchSpecRegex(tok,record){
+  tok=tok.toLowerCase().trim();
+  var spec=String(record["规格"]||"").toLowerCase();
+  if(!spec)return false;
+  for(var key in SPEC_REGEX){
+    if(tok===key||tok.indexOf(key)!==-1){
+      if(SPEC_REGEX[key].test(spec))return true;
+    }
+  }
+  return false;
+}
+
+function searchProduct(kw){
+  kw=kw.toLowerCase().trim();
+  var kwVariants=[kw];
+  var synonyms=getSynonyms(kw);
+  kwVariants=kwVariants.concat(synonyms);
+  return PRICE_DATA.filter(function(r){
+    var fields=[r["商品编码"],r["商品名称"],r["款式"],r["类别"],r["规格"],r["来源"],r["系列"],r["材质说明"]];
+    if(fields.some(function(x){return x&&kwVariants.some(function(v){return String(x).toLowerCase().indexOf(v)!==-1;});}))return true;
+    if(matchSpecRegex(kw,r))return true;
+    return false;
+  });
+}
+
 function searchAnd(tokens){
   if(!tokens||tokens.length===0)return[];
   return PRICE_DATA.filter(function(r){
@@ -594,7 +628,9 @@ function searchAnd(tokens){
       var variants=[tok.toLowerCase()];
       var syns=getSynonyms(tok);
       variants=variants.concat(syns);
-      return variants.some(function(v){return fieldStr.indexOf(v)!==-1;});
+      if(variants.some(function(v){return fieldStr.indexOf(v)!==-1;}))return true;
+      if(matchSpecRegex(tok,r))return true;
+      return false;
     });
   });
 }
