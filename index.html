@@ -270,6 +270,10 @@ header .settings-btn.has-key{color:var(--gold)}
     </div>
     <a class="link" href="https://platform.deepseek.com/api_keys" target="_blank">前往DeepSeek获取API Key →</a>
     <div class="status" id="settingsStatus"></div>
+    <div style="margin-top:12px;padding-top:10px;border-top:1px solid #eee;text-align:center">
+      <div style="font-size:11px;color:#aaa;margin-bottom:6px">版本 v5.1 (2026-07-05)</div>
+      <button onclick="forceUpdate()" style="font-size:12px;padding:6px 16px;border:1px solid #ddd;border-radius:6px;background:#f5f5f5;color:#666;cursor:pointer">检查更新</button>
+    </div>
   </div>
 </div>
 
@@ -314,6 +318,28 @@ function saveSettings(){
 function updateSettingsBtn(){
   var btn=document.getElementById('settingsBtn');
   if(getAPIKey()){btn.classList.add('has-key');}else{btn.classList.remove('has-key');}
+}
+function forceUpdate(){
+  var st=document.getElementById('settingsStatus');
+  st.className='status';
+  st.textContent='正在检查更新...';
+  if('serviceWorker' in navigator){
+    navigator.serviceWorker.getRegistrations().then(function(regs){
+      var promises=regs.map(function(r){return r.unregister();});
+      return Promise.all(promises);
+    }).then(function(){
+      if('caches' in window){
+        return caches.keys().then(function(names){
+          return Promise.all(names.map(function(n){return caches.delete(n);}));
+        });
+      }
+    }).then(function(){
+      st.textContent='✓ 已清除缓存，正在刷新...';
+      setTimeout(function(){window.location.reload(true);},500);
+    });
+  }else{
+    window.location.reload(true);
+  }
 }
 // Test API key validity
 function testAPIKey(){
@@ -1106,7 +1132,28 @@ function exportQuote(){
 document.getElementById("chatInput").addEventListener("keydown",function(e){
   if(e.key==="Enter"){e.preventDefault();sendMsg();}
 });
-if("serviceWorker" in navigator){navigator.serviceWorker.register("sw.js");}
+if("serviceWorker" in navigator){
+  navigator.serviceWorker.register("sw.js").then(function(reg){
+    // Listen for new SW updates
+    reg.addEventListener('updatefound',function(){
+      var newSW=reg.installing;
+      if(newSW){
+        newSW.addEventListener('statechange',function(){
+          if(newSW.state==='activated'){
+            // New SW activated, reload to get latest content
+            window.location.reload();
+          }
+        });
+      }
+    });
+    // Check for updates every 60 seconds
+    setInterval(function(){reg.update();},60000);
+  });
+  // Also listen for controlling change
+  navigator.serviceWorker.addEventListener('controllerchange',function(){
+    window.location.reload();
+  });
+}
 
 </script>
 </body>
