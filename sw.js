@@ -1,5 +1,5 @@
 // Service Worker - 芝华仕价格查询 PWA
-var CACHE_NAME = 'cheers-price-v3';
+var CACHE_NAME = 'cheers-price-v4';
 var CACHE_URLS = [
   './',
   './index.html',
