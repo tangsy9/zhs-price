@@ -247,6 +247,7 @@ function showWelcome(){
   var html='<div class="msg ai"><div class="welcome-card">'+
     '<h3>👋 你好！我是芝华仕AI价格助手</h3>'+
     '<div class="feat"><span>🔍</span> 输入商品名称/编码/款式即可查价</div>'+
+    '<div class="feat"><span>🤖</span> 支持模糊查询，说人话就行（如"三人沙发"）</div>'+
     '<div class="feat"><span>🎤</span> 点击麦克风按钮，语音说出商品名</div>'+
     '<div class="feat"><span>💰</span> 同时查多个商品，自动计算总价</div>'+
     '<div class="feat"><span>🛒</span> 点击"加入报价单"可累计多件商品</div>'+
@@ -256,7 +257,8 @@ function showWelcome(){
     '<span class="chip" onclick="quickQ(this)">510102587</span>'+
     '<span class="chip" onclick="quickQ(this)">SE-13006M</span>'+
     '<span class="chip" onclick="quickQ(this)">伯爵茶几+伯爵床</span>'+
-    '<span class="chip" onclick="quickQ(this)">头等舱单椅+脚踏</span>'+
+    '<span class="chip" onclick="quickQ(this)">三人沙发</span>'+
+    '<span class="chip" onclick="quickQ(this)">便宜的茶几</span>'+
     '</div></div></div>';
   document.getElementById("chatArea").innerHTML=html;
 }
@@ -273,10 +275,7 @@ function sendMsg(){
   input.value="";
   addMsg("user",q);
   showTyping();
-  setTimeout(function(){
-    hideTyping();
-    processQuery(q);
-  },300);
+  processQuery(q);
 }
 
 var SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
@@ -378,6 +377,8 @@ function showTyping(){
 }
 function hideTyping(){var t=document.getElementById("typingMsg");if(t)t.remove();}
 
+var AI_PROXY_URL='https://zhs-ai-proxy.lucky-octagon.workers.dev/';
+
 function processQuery(q){
   var keywords=parseKeywords(q);
   var groups=[];
@@ -388,16 +389,100 @@ function processQuery(q){
     }
   });
 
-  if(groups.length===0){
-    addMsg("ai",'😅 没有找到匹配的商品，试试用<b>商品名称</b>、<b>编码</b>或<b>款式</b>搜索。');
+  if(groups.length>0){
+    hideTyping();
+    showResults(groups);
     return;
   }
 
+  var typingEl=document.getElementById("typingMsg");
+  if(typingEl){
+    typingEl.innerHTML='<div class="bubble"><div style="font-size:13px;color:#888">🤖 AI正在理解你的需求...</div><div class="typing" style="margin-top:4px"><span></span><span></span><span></span></div></div>';
+  }
+
+  aiSearch(q,function(success,aiKeywords,errorMsg){
+    if(success&&aiKeywords&&aiKeywords.length>0){
+      aiKeywords.forEach(function(kw){
+        var results=searchProduct(kw);
+        if(results.length>0){
+          groups.push({keyword:kw+' \u2728',results:results});
+        }
+      });
+    }
+
+    if(groups.length>0){
+      hideTyping();
+      if(aiKeywords&&aiKeywords.length>0){
+        addMsg("ai",'\uD83E\uDD16 AI理解：你可能在找 <b>'+aiKeywords.join('\u3001</b><b>')+'</b>');
+      }
+      showResults(groups);
+    }else{
+      var fuzzyResults=localFuzzySearch(q);
+      if(fuzzyResults.length>0){
+        hideTyping();
+        groups.push({keyword:q+' (\u6a21\u7cca\u5339\u914d)',results:fuzzyResults});
+        showResults(groups);
+      }else{
+        hideTyping();
+        var hint=success?'\uD83D\uDE05 \u6ca1\u6709\u627e\u5230\u5339\u914d\u7684\u5546\u54c1\uff0c\u8bd5\u8bd5\u7528<b>\u5546\u54c1\u540d\u79f0</b>\u3001<b>\u7f16\u7801</b>\u6216<b>\u6b3e\u5f0f</b>\u641c\u7d22\u3002':'\uD83D\uDE05 \u6ca1\u6709\u627e\u5230\u5339\u914d\u7684\u5546\u54c1\uff0cAI\u670d\u52a1\u6682\u4e0d\u53ef\u7528\uff0c\u8bd5\u8bd5\u7528<b>\u5546\u54c1\u540d\u79f0</b>\u3001<b>\u7f16\u7801</b>\u6216<b>\u6b3e\u5f0f</b>\u641c\u7d22\u3002';
+        addMsg("ai",hint);
+      }
+    }
+  });
+}
+
+function aiSearch(query,callback){
+  var controller=new AbortController();
+  var timeoutId=setTimeout(function(){controller.abort();},8000);
+
+  fetch(AI_PROXY_URL,{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({query:query}),
+    signal:controller.signal
+  })
+  .then(function(resp){return resp.json();})
+  .then(function(data){
+    clearTimeout(timeoutId);
+    if(data.keywords&&Array.isArray(data.keywords)){
+      callback(true,data.keywords,null);
+    }else{
+      callback(false,null,data.error||'Unknown error');
+    }
+  })
+  .catch(function(err){
+    clearTimeout(timeoutId);
+    callback(false,null,err.message);
+  });
+}
+
+function localFuzzySearch(q){
+  var chars=q.replace(/[^\u4e00-\u9fa5a-z0-9]/gi,'').toLowerCase();
+  if(chars.length<2)return[];
+
+  var results=[];
+  var seen={};
+  for(var i=0;i<chars.length-1;i++){
+    var pair=chars.substring(i,i+2);
+    var matches=searchProduct(pair);
+    matches.forEach(function(r){
+      var key=r["\u5546\u54c1\u7f16\u7801"]+"|"+r["\u5546\u54c1\u540d\u79f0"];
+      if(!seen[key]){
+        seen[key]=true;
+        results.push(r);
+      }
+    });
+    if(results.length>=15)break;
+  }
+  return results;
+}
+
+function showResults(groups){
   var allItems=[];
   groups.forEach(function(g){
     var top=g.results.slice(0,5);
     var html='<div class="bubble" style="padding:6px">';
-    html+='<div style="font-size:12px;color:#888;margin-bottom:4px">🔍 "<b>'+g.keyword+'</b>" 找到 '+g.results.length+' 条' +(g.results.length>5?' (显示前5条)':'')+'</div>';
+    html+='<div style="font-size:12px;color:#888;margin-bottom:4px">\uD83D\uDD0D "<b>'+g.keyword+'</b>" \u627e\u5230 '+g.results.length+' \u6761' +(g.results.length>5?' (\u663e\u793a\u524d5\u6761)':'')+'</div>';
     top.forEach(function(r){
       html+=renderProductCard(r);
       allItems.push(r);
