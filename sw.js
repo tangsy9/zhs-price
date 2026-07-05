@@ -1,7 +1,8 @@
 // Service Worker - 芝华仕价格查询 PWA
-var CACHE_NAME = 'cheers-price-v1';
+var CACHE_NAME = 'cheers-price-v2';
 var CACHE_URLS = [
-  './芝华仕价格查询.html',
+  './',
+  './index.html',
   './manifest.json',
   './icon-192.png',
   './icon-180.png',
@@ -37,7 +38,7 @@ self.addEventListener('fetch', function(e) {
   if (e.request.mode === 'navigate') {
     e.respondWith(
       fetch(e.request).catch(function() {
-        return caches.match('./芝华仕价格查询.html');
+        return caches.match('./');
       })
     );
     return;
