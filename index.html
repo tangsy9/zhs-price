@@ -382,12 +382,28 @@ var AI_PROXY_URL='https://zhs-ai-proxy.lucky-octagon.workers.dev/';
 function processQuery(q){
   var keywords=parseKeywords(q);
   var groups=[];
+
   keywords.forEach(function(kw){
     var results=searchProduct(kw);
     if(results.length>0){
       groups.push({keyword:kw,results:results});
     }
   });
+
+  if(groups.length===0){
+    var tokens=smartSplit(q);
+    if(tokens.length>1){
+      var andResults=searchAnd(tokens);
+      if(andResults.length>0){
+        groups.push({keyword:tokens.join('+')+' (组合匹配)',results:andResults});
+      }else{
+        tokens.forEach(function(tok){
+          var r=searchProduct(tok);
+          if(r.length>0)groups.push({keyword:tok,results:r});
+        });
+      }
+    }
+  }
 
   if(groups.length>0){
     hideTyping();
@@ -507,11 +523,79 @@ function parseKeywords(q){
   return parts.map(function(s){return s.trim();});
 }
 
+function smartSplit(q){
+  var tokens=[];
+  var re=/([a-zA-Z]{0,3}-?\d{3,})|([\u4e00-\u9fa5]+)|(\d{6,})/g;
+  var m;
+  while((m=re.exec(q))!==null){
+    if(m[1])tokens.push(m[1]);
+    if(m[2])tokens.push(m[2]);
+    if(m[3]&&tokens.indexOf(m[3])===-1)tokens.push(m[3]);
+  }
+  if(tokens.length===0){
+    tokens=q.split(/[\s,，、+]+/).filter(function(s){return s.length>0;});
+  }
+  return tokens;
+}
+
 function searchProduct(kw){
   kw=kw.toLowerCase().trim();
+  var kwVariants=[kw];
+  var synonyms=getSynonyms(kw);
+  kwVariants=kwVariants.concat(synonyms);
   return PRICE_DATA.filter(function(r){
     var fields=[r["商品编码"],r["商品名称"],r["款式"],r["类别"],r["规格"],r["来源"],r["系列"],r["材质说明"]];
-    return fields.some(function(x){return x&&String(x).toLowerCase().indexOf(kw)!==-1;});
+    return fields.some(function(x){return x&&kwVariants.some(function(v){return String(x).toLowerCase().indexOf(v)!==-1;});});
+  });
+}
+
+var SYNONYM_MAP={
+  '茶几':['cj','长几','圆几','边几'],
+  '长几':['cj','茶几'],
+  '圆几':['yj','茶几'],
+  '边几':['bj','茶几'],
+  '餐台':['ct','餐桌'],
+  '餐椅':['cy','椅子'],
+  '地柜':['dg','电视柜'],
+  '电视柜':['dg','地柜'],
+  '餐边柜':['bg','备餐柜'],
+  '抽屉柜':['cg'],
+  '沙发':['sf'],
+  '单椅':['dy','椅子'],
+  '脚踏':['jt','脚凳'],
+  '床架':['cj','床'],
+  '床垫':['cd'],
+  '床头柜':['ctg','床头'],
+  '斗柜':['dg'],
+  '妆台':['zt','梳妆台'],
+  '妆凳':['zd','梳妆凳']
+};
+
+function getSynonyms(kw){
+  kw=kw.toLowerCase().trim();
+  var result=[];
+  if(SYNONYM_MAP[kw]){
+    result=result.concat(SYNONYM_MAP[kw]);
+  }
+  for(var key in SYNONYM_MAP){
+    if(kw.indexOf(key)!==-1){
+      result=result.concat(SYNONYM_MAP[key]);
+    }
+  }
+  return result.filter(function(v,i,a){return a.indexOf(v)===i;});
+}
+
+function searchAnd(tokens){
+  if(!tokens||tokens.length===0)return[];
+  return PRICE_DATA.filter(function(r){
+    var fields=[r["商品编码"],r["商品名称"],r["款式"],r["类别"],r["规格"],r["来源"],r["系列"],r["材质说明"]];
+    var fieldStr=fields.map(function(x){return x?String(x).toLowerCase():'';}).join(' ');
+    return tokens.every(function(tok){
+      var variants=[tok.toLowerCase()];
+      var syns=getSynonyms(tok);
+      variants=variants.concat(syns);
+      return variants.some(function(v){return fieldStr.indexOf(v)!==-1;});
+    });
   });
 }
 
