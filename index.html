@@ -483,8 +483,6 @@ function showTyping(){
 }
 function hideTyping(){var t=document.getElementById("typingMsg");if(t)t.remove();}
 
-var AI_PROXY_URL='https://zhs-ai-proxy.lucky-octagon.workers.dev/';
-
 function isCodeQuery(q){
   // If query contains 4+ consecutive digits, treat as code/style search
   return /\d{4,}/.test(q);
@@ -736,11 +734,6 @@ function aiSearchDirect(query,callback){
     clearTimeout(timeoutId);
     callback(false,null,err.name==='AbortError'?'请求超时':err.message);
   });
-}
-
-// Legacy proxy-based search (kept as fallback, rarely used)
-function aiSearch(query,callback){
-  aiSearchDirect(query,callback);
 }
 
 function localFuzzySearch(q){
