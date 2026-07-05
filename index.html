@@ -158,6 +158,11 @@ header .stats{font-size:10px;color:#99a;background:rgba(255,255,255,.08);padding
 #inputBar button{width:38px;height:38px;border-radius:50%;border:none;background:linear-gradient(135deg,var(--gold),#b8942e);color:#fff;font-size:16px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;-webkit-appearance:none}
 #inputBar button:active{opacity:.8}
 #inputBar .quote-btn{background:#fff;border:1.5px solid var(--gold);color:var(--gold);font-size:13px;font-weight:600;width:auto;padding:0 14px;border-radius:20px}
+#inputBar .mic-btn{background:#fff;border:1.5px solid #e0e0e0;color:#999;font-size:17px;transition:all .3s}
+#inputBar .mic-btn.recording{background:#ff4d4f;border-color:#ff4d4f;color:#fff;animation:micPulse 1.2s infinite}
+@keyframes micPulse{0%{box-shadow:0 0 0 0 rgba(255,77,79,.4)}70%{box-shadow:0 0 0 12px rgba(255,77,79,0)}100%{box-shadow:0 0 0 0 rgba(255,77,79,0)}}
+@keyframes fadeIn{from{opacity:0;transform:translateX(-50%) translateY(6px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+.voice-hint{position:fixed;bottom:120px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.78);color:#fff;padding:6px 18px;border-radius:20px;font-size:13px;z-index:999;animation:fadeIn .2s}
 .typing{display:flex;gap:3px;padding:4px 0}
 .typing span{width:6px;height:6px;background:#ccc;border-radius:50%;animation:blink 1.4s infinite}
 .typing span:nth-child(2){animation-delay:.2s}
@@ -194,6 +199,7 @@ header .stats{font-size:10px;color:#99a;background:rgba(255,255,255,.08);padding
   <div id="inputBar">
     <button class="quote-btn" onclick="openQuote()">🛒</button>
     <input type="text" id="chatInput" placeholder="输入商品名称、编码、款式...可同时查多个" autocomplete="off">
+    <button class="mic-btn" id="micBtn" onclick="toggleVoice()">🎤</button>
     <button onclick="sendMsg()">↑</button>
   </div>
 </div>
@@ -241,6 +247,7 @@ function showWelcome(){
   var html='<div class="msg ai"><div class="welcome-card">'+
     '<h3>👋 你好！我是芝华仕AI价格助手</h3>'+
     '<div class="feat"><span>🔍</span> 输入商品名称/编码/款式即可查价</div>'+
+    '<div class="feat"><span>🎤</span> 点击麦克风按钮，语音说出商品名</div>'+
     '<div class="feat"><span>💰</span> 同时查多个商品，自动计算总价</div>'+
     '<div class="feat"><span>🛒</span> 点击"加入报价单"可累计多件商品</div>'+
     '<div class="feat"><span>📋</span> 支持导出报价单，方便发给客户</div>'+
@@ -270,6 +277,84 @@ function sendMsg(){
     hideTyping();
     processQuery(q);
   },300);
+}
+
+var SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
+var recognition=null;
+var isRecording=false;
+
+function toggleVoice(){
+  if(isRecording){
+    stopVoice();
+    return;
+  }
+  if(!SpeechRecognition){
+    addMsg("ai",'😅 当前浏览器不支持语音输入，请使用 Safari (iOS) 或 Chrome (Android) 浏览器。');
+    return;
+  }
+  recognition=new SpeechRecognition();
+  recognition.lang='zh-CN';
+  recognition.continuous=false;
+  recognition.interimResults=true;
+
+  var input=document.getElementById("chatInput");
+  var micBtn=document.getElementById("micBtn");
+  var hint=document.createElement("div");
+  hint.className="voice-hint";
+  hint.textContent="🎙️ 正在聆听...请说出商品名称";
+  hint.id="voiceHint";
+  document.body.appendChild(hint);
+
+  var finalText="";
+  recognition.onresult=function(event){
+    var interim="";
+    for(var i=event.resultIndex;i<event.results.length;i++){
+      if(event.results[i].isFinal){
+        finalText+=event.results[i][0].transcript;
+      }else{
+        interim+=event.results[i][0].transcript;
+      }
+    }
+    input.value=finalText+interim;
+  };
+
+  recognition.onend=function(){
+    isRecording=false;
+    micBtn.classList.remove("recording");
+    micBtn.textContent="🎤";
+    var h=document.getElementById("voiceHint");
+    if(h)h.remove();
+    var val=input.value.trim();
+    if(val){
+      input.focus();
+      input.setSelectionRange(val.length,val.length);
+    }
+  };
+
+  recognition.onerror=function(event){
+    isRecording=false;
+    micBtn.classList.remove("recording");
+    micBtn.textContent="🎤";
+    var h=document.getElementById("voiceHint");
+    if(h)h.remove();
+    if(event.error==="not-allowed"){
+      addMsg("ai",'⚠️ 请允许麦克风权限后使用语音输入。');
+    }
+  };
+
+  recognition.start();
+  isRecording=true;
+  micBtn.classList.add("recording");
+  micBtn.textContent="●";
+  input.value="";
+  input.placeholder="语音输入中...";
+  setTimeout(function(){input.placeholder="输入商品名称、编码、款式...可同时查多个";},3000);
+}
+
+function stopVoice(){
+  if(recognition&&isRecording){
+    recognition.stop();
+  }
 }
 
 function addMsg(type,text){
