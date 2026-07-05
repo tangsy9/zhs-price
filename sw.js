@@ -1,5 +1,5 @@
 // Service Worker - 芝华仕价格查询 PWA
-var CACHE_NAME = 'cheers-price-v4';
+var CACHE_NAME = 'cheers-price-v5';
 var CACHE_URLS = [
   './',
   './index.html',
@@ -34,19 +34,28 @@ self.addEventListener('activate', function(e) {
 });
 
 self.addEventListener('fetch', function(e) {
-  // For navigation requests, try network first, fallback to cache
+  // For navigation requests, always network first + update cache
   if (e.request.mode === 'navigate') {
     e.respondWith(
-      fetch(e.request).catch(function() {
-        return caches.match('./');
+      fetch(e.request).then(function(resp) {
+        var copy = resp.clone();
+        caches.open(CACHE_NAME).then(function(cache) {
+          cache.put('./', copy);
+          cache.put('./index.html', copy);
+        });
+        return resp;
+      }).catch(function() {
+        return caches.match('./').then(function(r) {
+          return r || caches.match('./index.html');
+        });
       })
     );
     return;
   }
-  // For other requests, cache first, fallback to network
+  // For other requests, network first, fallback to cache
   e.respondWith(
-    caches.match(e.request).then(function(response) {
-      return response || fetch(e.request);
+    fetch(e.request).catch(function() {
+      return caches.match(e.request);
     })
   );
 });
