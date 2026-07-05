@@ -403,11 +403,47 @@ function processQuery(q){
       if(andResults.length>0){
         groups.push({keyword:tokens.join('+')+' (\u7ec4\u5408\u5339\u914d)',results:andResults});
       }else{
-        // AND found nothing, try each token individually
-        tokens.forEach(function(tok){
-          var r=searchProduct(tok);
-          if(r.length>0)groups.push({keyword:tok,results:r});
-        });
+        // AND found nothing - try code-first approach
+        var codeTokens=tokens.filter(function(t){return /\d/.test(t);});
+        var descTokens=tokens.filter(function(t){return !/\d/.test(t);});
+        if(codeTokens.length>0){
+          var codeResults=[];
+          var seen={};
+          codeTokens.forEach(function(ct){
+            searchProduct(ct).forEach(function(r){
+              var k=r["\u5546\u54c1\u7f16\u7801"]+"|"+r["\u5546\u54c1\u540d\u79f0"]+"|"+(r["\u6b3e\u5f0f"]||"")+"|"+(r["\u89c4\u683c"]||"");
+              if(!seen[k]){seen[k]=true;codeResults.push(r);}
+            });
+          });
+          if(codeResults.length>0&&descTokens.length>0){
+            var filtered=codeResults.filter(function(r){
+              var fields=[r["\u5546\u54c1\u7f16\u7801"],r["\u5546\u54c1\u540d\u79f0"],r["\u6b3e\u5f0f"],r["\u7c7b\u522b"],r["\u89c4\u683c"],r["\u6765\u6e90"],r["\u7cfb\u5217"],r["\u6750\u8d28\u8bf4\u660e"]];
+              var fieldStr=fields.map(function(x){return x?String(x).toLowerCase():'';}).join(' ');
+              return descTokens.every(function(tok){
+                var variants=[tok.toLowerCase()].concat(getSynonyms(tok));
+                if(variants.some(function(v){return fieldStr.indexOf(v)!==-1;}))return true;
+                if(matchSpecRegex(tok,r))return true;
+                return false;
+              });
+            });
+            if(filtered.length>0){
+              groups.push({keyword:tokens.join('+')+' (\u7ec4\u5408\u5339\u914d)',results:filtered});
+            }else{
+              groups.push({keyword:codeTokens.join('+'),results:codeResults});
+            }
+          }else if(codeResults.length>0){
+            groups.push({keyword:codeTokens.join('+'),results:codeResults});
+          }
+        }
+        // If still no results, try individual searchProduct (skip overly broad tokens >100 results)
+        if(groups.length===0){
+          tokens.forEach(function(tok){
+            var r=searchProduct(tok);
+            if(r.length>0&&r.length<=100){
+              groups.push({keyword:tok,results:r});
+            }
+          });
+        }
       }
     }else if(tokens.length===1){
       var singleResults=searchProduct(tokens[0]);
@@ -535,6 +571,35 @@ function parseKeywords(q){
   return parts.map(function(s){return s.trim();});
 }
 
+function splitChineseToken(tok){
+  var parts=[tok];
+  var changed=true;
+  while(changed){
+    changed=false;
+    var newParts=[];
+    for(var i=0;i<parts.length;i++){
+      var p=parts[i];
+      var found=false;
+      var keys=Object.keys(SYNONYM_MAP).sort(function(a,b){return b.length-a.length;});
+      for(var j=0;j<keys.length;j++){
+        var key=keys[j];
+        if(key.length>=2&&p!==key&&p.indexOf(key)!==-1){
+          var idx=p.indexOf(key);
+          if(idx>0)newParts.push(p.substring(0,idx));
+          newParts.push(key);
+          if(idx+key.length<p.length)newParts.push(p.substring(idx+key.length));
+          found=true;
+          changed=true;
+          break;
+        }
+      }
+      if(!found)newParts.push(p);
+    }
+    parts=newParts;
+  }
+  return parts.filter(function(p){return p.length>0;});
+}
+
 function smartSplit(q){
   var tokens=[];
   var re=/([a-zA-Z]{0,3}-?\d{3,})|(\d[\u4e00-\u9fa5]{1,2})|([\u4e00-\u9fa5]+)|(\d{6,})/g;
@@ -548,7 +613,15 @@ function smartSplit(q){
   if(tokens.length===0){
     tokens=q.split(/[\s,，、+]+/).filter(function(s){return s.length>0;});
   }
-  return tokens;
+  // Further split Chinese tokens by known SYNONYM_MAP keys
+  var expanded=[];
+  tokens.forEach(function(tok){
+    var sub=splitChineseToken(tok);
+    sub.forEach(function(s){
+      if(expanded.indexOf(s)===-1)expanded.push(s);
+    });
+  });
+  return expanded;
 }
 
 var SYNONYM_MAP={
@@ -571,11 +644,27 @@ var SYNONYM_MAP={
   '斗柜':['dg'],
   '妆台':['zt','梳妆台'],
   '妆凳':['zd','梳妆凳'],
-  '4人位':['l4'],'4座位':['l4'],'四人位':['l4'],'四座位':['l4'],
-  '3人位':['l3'],'3座位':['l3'],'三人位':['l3'],'三座位':['l3'],
-  '2人位':['l2'],'2座位':['l2'],'二人位':['l2'],'二座位':['l2'],
-  '1人位':['l1'],'1座位':['l1'],'一人位':['l1'],'一座位':['l1'],'单人位':['l1'],
-  '5人位':['l5'],'5座位':['l5'],'五人位':['l5'],'五座位':['l5']
+  '4人位':['l4','4座位','四人位','四座位'],
+  '4座位':['l4','4人位','四人位','四座位'],
+  '四人位':['l4','4人位','4座位','四座位'],
+  '四座位':['l4','4人位','4座位','四人位'],
+  '3人位':['l3','3座位','三人位','三座位'],
+  '3座位':['l3','3人位','三人位','三座位'],
+  '三人位':['l3','3人位','3座位','三座位'],
+  '三座位':['l3','3人位','3座位','三人位'],
+  '2人位':['l2','2座位','二人位','二座位'],
+  '2座位':['l2','2人位','二人位','二座位'],
+  '二人位':['l2','2人位','2座位','二座位'],
+  '二座位':['l2','2人位','2座位','二人位'],
+  '1人位':['l1','1座位','一人位','一座位','单人位'],
+  '1座位':['l1','1人位','一人位','一座位','单人位'],
+  '一人位':['l1','1人位','1座位','一座位','单人位'],
+  '一座位':['l1','1人位','1座位','一人位','单人位'],
+  '单人位':['l1','1人位','1座位','一人位','一座位'],
+  '5人位':['l5','5座位','五人位','五座位'],
+  '5座位':['l5','5人位','五人位','五座位'],
+  '五人位':['l5','5人位','5座位','五座位'],
+  '五座位':['l5','5人位','5座位','五人位']
 };
 
 var SPEC_REGEX={
