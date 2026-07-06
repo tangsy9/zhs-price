@@ -314,7 +314,7 @@ header .settings-btn.has-key{color:var(--gold)}
     <a class="link" href="https://platform.deepseek.com/api_keys" target="_blank">前往DeepSeek获取API Key →</a>
     <div class="status" id="settingsStatus"></div>
     <div style="margin-top:12px;padding-top:10px;border-top:1px solid #eee;text-align:center">
-      <div style="font-size:11px;color:#aaa;margin-bottom:6px">版本 v7 (2026-07-06)</div>
+      <div style="font-size:11px;color:#aaa;margin-bottom:6px">版本 v8 (2026-07-06)</div>
       <button onclick="forceUpdate()" style="font-size:12px;padding:6px 16px;border:1px solid #ddd;border-radius:6px;background:#f5f5f5;color:#666;cursor:pointer">检查更新</button>
     </div>
   </div>
@@ -849,9 +849,7 @@ function showResults(groups){
     area.scrollTop=area.scrollHeight;
   });
 
-  if(allItems.length>1){
-    showTotal(allItems);
-  }
+  // 价格汇总已取消
 }
 
 function parseKeywords(q){
