@@ -367,7 +367,7 @@ header .settings-btn.has-key{color:var(--gold)}
     <a class="link" href="https://platform.deepseek.com/api_keys" target="_blank">前往DeepSeek获取API Key →</a>
     <div class="status" id="settingsStatus"></div>
     <div style="margin-top:12px;padding-top:10px;border-top:1px solid #eee;text-align:center">
-      <div style="font-size:11px;color:#aaa;margin-bottom:6px">版本 v9 (2026-07-06)</div>
+      <div style="font-size:11px;color:#aaa;margin-bottom:6px">版本 v9.1 (2026-07-06)</div>
       <button onclick="forceUpdate()" style="font-size:12px;padding:6px 16px;border:1px solid #ddd;border-radius:6px;background:#f5f5f5;color:#666;cursor:pointer">检查更新</button>
     </div>
   </div>
@@ -1062,6 +1062,13 @@ function processQuery(q){
   if(groups.length>0){
     hideTyping();
     showResults(groups);
+    return;
+  }
+
+  // Pure code query found nothing → don't fallback to AI/fuzzy, just tell user
+  if(isCodeQuery(q)&&!/[\u4e00-\u9fa5]/.test(q)){
+    hideTyping();
+    addMsg("ai",'😅 没有找到编码 <b>'+q+'</b> 对应的商品，请检查编码是否正确，或试试用<b>商品名称</b>、<b>款式</b>搜索。');
     return;
   }
 
